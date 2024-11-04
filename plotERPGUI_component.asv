@@ -931,27 +931,65 @@ end
 
 function startDragSelection(src, ~)
     % Initialize rubber band selection
-    %mainFig = getMainFigure(src);
+    mainFig = getMainFigure(src);
     ax = src.UserData.axes1;
     point1 = ax.CurrentPoint(1, 1:2);
-    rbbox;
-    point2 = ax.CurrentPoint(1, 1:2);
-    
-    % Calculate selection boundaries
-    xStart = min(point1(1), point2(1));
-    xEnd = max(point1(1), point2(1));
-    
-    % Update component info
-    updateComponentInfo(src,xStart, xEnd);
-    
-    % Highlight selected area
-    % Remove any existing selection patch
-    delete(findobj(ax, 'Tag', 'SelectionPatch'));
-    
-    % Create new selection patch
-    yLimits = ax.YLim;
-    patch(ax, [xStart xStart xEnd xEnd], [yLimits(1) yLimits(2) yLimits(2) yLimits(1)], ...
-        [.3 .6 1], 'FaceAlpha', 0.2, 'EdgeColor', 'none', 'Tag', 'SelectionPatch');
+
+    if strcmp(src.SelectionType,'normal')
+
+        rbbox;
+        point2 = ax.CurrentPoint(1, 1:2);
+        
+        % Calculate selection boundaries
+        xStart = min(point1(1), point2(1));
+        xEnd = max(point1(1), point2(1));
+        
+        % Update component info
+        updateComponentInfo(src,xStart, xEnd);
+        
+        % Highlight selected area
+        % Remove any existing selection patch
+        delete(findobj(ax, 'Tag', 'SelectionPatch'));
+        
+        % Create new selection patch
+        yLimits = ax.YLim;
+        patch(ax, [xStart xStart xEnd xEnd], [yLimits(1) yLimits(2) yLimits(2) yLimits(1)], ...
+            [.3 .6 1], 'FaceAlpha', 0.2, 'EdgeColor', 'none', 'Tag', 'SelectionPatch');
+
+    elseif strcmp(src.SelectionType,'alt')
+        ax = src.UserData.axes1;
+        point1 = ax.CurrentPoint(1, 1:2);
+        data = mainFig.UserData.meanERP;
+        xStart = point1(1);
+        yStart = point1(2);
+
+        % Change peak and latency
+        mainFig = getMainFigure(src);
+        startTime_og = str2double(mainFig.UserData.startTime.String);
+        srate = mainFig.UserData.currentEEG.srate;
+        startBin = realTimeToBin(point1,srate,startTime_og);
+
+        selectedData = data(startBin, :);
+        [maxVal, maxIdx] = max(abs(selectedData(:)));
+        [relTimeIdx, chanIdx] = ind2sub(size(selectedData), maxIdx); % Get relative time index in selectedData
+        peak = selectedData(relTimeIdx, chanIdx);
+        latency = binToRealTime(relTimeIdx, srate, startTime_og);
+        mainFig.UserData.componentsTable.Data{4} = peak;
+        mainFig.UserData.componentsTable.Data{5} = latency;
+
+        % Plot X on the region
+        yLimits = ax.YLim;
+        % Remove any existing selection patch
+        delete(findobj(ax, 'Tag', 'SelectionPeak'));
+        patch(ax,[xStart xStart xStart xStart], [yLimits(1) yLimits(2) yLimits(2) yLimits(1)], ...
+            'MarkerSize',10, 'Tag', 'SelectionPeak')
+        
+        %patch(ax, [xStart xStart xEnd xEnd], [yLimits(1) yLimits(2) yLimits(2) yLimits(1)], ...
+        %   [.3 .6 1], 'FaceAlpha', 0.2, 'EdgeColor', 'none', 'Tag', 'SelectionPatch');
+        
+    elseif strcmp(src.SelectionType,'extend')
+
+    end
 end
 
 function realTime = binToRealTime(bin, srate, startTime)
@@ -981,20 +1019,23 @@ function updateComponentInfo(src,startTime, endTime)
     startTime_og = str2double(mainFig.UserData.startTime.String);
     endTime_og = str2double(mainFig.UserData.endTime.String);
     times = startTime_og:endTime_og; % Define times array within the range
-    srate 
-    startBin = realTimeToBin(startTime,mainFig.UserData.currentEEG.srate,startTime_og);
-    endBin = realTimeToBin(endTime,mainFig.UserData.currentEEG.srate,startTime_og);
+    
+    % Defining srate
+    srate = mainFig.UserData.currentEEG.srate;
+
+    % Calculate start and end time bins in original data s freq.
+    startBin = realTimeToBin(startTime,srate,startTime_og);
+    endBin = realTimeToBin(endTime,srate,startTime_og);
     % Find indices within the time range
     selectedData = data(startBin:endBin, :);
-    % Calculate start and end time bins in original data s freq.
-    
+        
     % Calculate metrics
     [maxVal, maxIdx] = max(abs(selectedData(:))); % Find peak value and its index in the subset
     [relTimeIdx, chanIdx] = ind2sub(size(selectedData), maxIdx); % Get relative time index in selectedData
     peak = selectedData(relTimeIdx, chanIdx);
     
     % Map relative index back to absolute time
-    latency = realTime = binToRealTime(relTimeIdx, srate, startTime);
+    latency = binToRealTime(relTimeIdx + startBin, srate, startTime_og);
     
     % Calculate average power in selected data range
     avgPower = mean(selectedData(:).^2);
