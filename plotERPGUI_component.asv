@@ -981,23 +981,20 @@ function updateComponentInfo(src,startTime, endTime)
     startTime_og = str2double(mainFig.UserData.startTime.String);
     endTime_og = str2double(mainFig.UserData.endTime.String);
     times = startTime_og:endTime_og; % Define times array within the range
-    
-    % Defining srate
-    srate = mainFig.UserData.currentEEG.srate;
-
-    % Calculate start and end time bins in original data s freq.
-    startBin = realTimeToBin(startTime,srate,startTime_og);
-    endBin = realTimeToBin(endTime,srate,startTime_og);
+    srate 
+    startBin = realTimeToBin(startTime,mainFig.UserData.currentEEG.srate,startTime_og);
+    endBin = realTimeToBin(endTime,mainFig.UserData.currentEEG.srate,startTime_og);
     % Find indices within the time range
     selectedData = data(startBin:endBin, :);
-        
+    % Calculate start and end time bins in original data s freq.
+    
     % Calculate metrics
     [maxVal, maxIdx] = max(abs(selectedData(:))); % Find peak value and its index in the subset
     [relTimeIdx, chanIdx] = ind2sub(size(selectedData), maxIdx); % Get relative time index in selectedData
     peak = selectedData(relTimeIdx, chanIdx);
     
     % Map relative index back to absolute time
-    latency = binToRealTime(relTimeIdx + startBin, srate, startTime_og);
+    latency = realTime = binToRealTime(relTimeIdx, srate, startTime);
     
     % Calculate average power in selected data range
     avgPower = mean(selectedData(:).^2);
