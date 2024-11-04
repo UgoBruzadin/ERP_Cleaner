@@ -931,27 +931,65 @@ end
 
 function startDragSelection(src, ~)
     % Initialize rubber band selection
-    %mainFig = getMainFigure(src);
+    mainFig = getMainFigure(src);
     ax = src.UserData.axes1;
     point1 = ax.CurrentPoint(1, 1:2);
-    rbbox;
-    point2 = ax.CurrentPoint(1, 1:2);
-    
-    % Calculate selection boundaries
-    xStart = min(point1(1), point2(1));
-    xEnd = max(point1(1), point2(1));
-    
-    % Update component info
-    updateComponentInfo(src,xStart, xEnd);
-    
-    % Highlight selected area
-    % Remove any existing selection patch
-    delete(findobj(ax, 'Tag', 'SelectionPatch'));
-    
-    % Create new selection patch
-    yLimits = ax.YLim;
-    patch(ax, [xStart xStart xEnd xEnd], [yLimits(1) yLimits(2) yLimits(2) yLimits(1)], ...
-        [.3 .6 1], 'FaceAlpha', 0.2, 'EdgeColor', 'none', 'Tag', 'SelectionPatch');
+
+    if strcmp(src.SelectionType,'normal')
+
+        rbbox;
+        point2 = ax.CurrentPoint(1, 1:2);
+        
+        % Calculate selection boundaries
+        xStart = min(point1(1), point2(1));
+        xEnd = max(point1(1), point2(1));
+        
+        % Update component info
+        updateComponentInfo(src,xStart, xEnd);
+        
+        % Highlight selected area
+        % Remove any existing selection patch
+        delete(findobj(ax, 'Tag', 'SelectionPatch'));
+        
+        % Create new selection patch
+        yLimits = ax.YLim;
+        patch(ax, [xStart xStart xEnd xEnd], [yLimits(1) yLimits(2) yLimits(2) yLimits(1)], ...
+            [.3 .6 1], 'FaceAlpha', 0.2, 'EdgeColor', 'none', 'Tag', 'SelectionPatch');
+
+    elseif strcmp(src.SelectionType,'alt')
+        ax = src.UserData.axes1;
+        point1 = ax.CurrentPoint(1, 1:2);
+        data = mainFig.UserData.meanERP;
+        xStart = point1(1);
+        yStart = point1(2);
+
+        % Change peak and latency
+        mainFig = getMainFigure(src);
+        startTime_og = str2double(mainFig.UserData.startTime.String);
+        srate = mainFig.UserData.currentEEG.srate;
+        startBin = realTimeToBin(point1,srate,startTime_og);
+
+        selectedData = data(startBin, :);
+        [maxVal, maxIdx] = max(abs(selectedData(:)));
+        [relTimeIdx, chanIdx] = ind2sub(size(selectedData), maxIdx); % Get relative time index in selectedData
+        peak = selectedData(relTimeIdx, chanIdx);
+        latency = binToRealTime(relTimeIdx, srate, startTime_og);
+        mainFig.UserData.componentsTable.Data{4} = peak;
+        mainFig.UserData.componentsTable.Data{5} = latency;
+
+        % Plot X on the region
+        yLimits = ax.YLim;
+        % Remove any existing selection patch
+        delete(findobj(ax, 'Tag', 'SelectionPeak'));
+        patch(ax,[xStart xStart xStart xStart], [yLimits(1) yLimits(2) yLimits(2) yLimits(1)], ...
+            'MarkerSize',10, 'Tag', 'SelectionPeak')
+        
+        %patch(ax, [xStart xStart xEnd xEnd], [yLimits(1) yLimits(2) yLimits(2) yLimits(1)], ...
+        %   [.3 .6 1], 'FaceAlpha', 0.2, 'EdgeColor', 'none', 'Tag', 'SelectionPatch');
+        
+    elseif strcmp(src.SelectionType,'extend')
+
+    end
 end
 
 function realTime = binToRealTime(bin, srate, startTime)
