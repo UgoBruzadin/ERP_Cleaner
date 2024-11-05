@@ -4,6 +4,15 @@ function plotERPGUI_component(events)
         events = 1;
     end
 
+
+    % Save as you go
+    % Save the name of the people and timestamp
+    % Make the various components
+    % Plot the topoplot of the component max and min
+    % Save voltage of all channels at all marked times
+    % Read, Test, Train
+    % 
+
     % Create main figure
     mainFig = figure('Name', 'ERP Analysis Tool', ...
                     'Position', [100 100 1600 600], ...
@@ -15,29 +24,18 @@ function plotERPGUI_component(events)
     zoom off;
     pan off;
     rotate3d off;
+    % Create panel for side menu
+    sidePanel = uipanel('Parent', mainFig, ...
+                       'Position', [0 0 0.2 1], ...
+                       'Tag','LeftPanel',...
+                       'BackgroundColor', [0.94 0.94 0.94]);
 
-% Define main grid layout with 1 row and 3 columns
-mainGrid = uigridlayout(mainFig, [1, 3]);
-mainGrid.ColumnWidth = {'0.2x', '0.6x', '0.2x'}; % Relative sizing for left, middle, and right panels
-mainGrid.RowHeight = {'1x'}; % Only one row
-
-% Left Panel (Side menu)
-sidePanel = uipanel(mainGrid, ...
-                    'Tag','LeftPanel', ...
-                    'BackgroundColor', [0.94 0.94 0.94]);
-sideGrid = uigridlayout(sidePanel, [10, 1]); % Define sections within the side panel
-
-
-% Middle Panel for Plots
-plotPanel = uipanel(mainGrid, 'Tag','PlotPanel');
-plotGrid = uigridlayout(plotPanel, [2, 1]); % 2 rows for two plots
-
-% Right Panel
-sidePanel2 = uipanel(mainGrid, ...
-                     'Tag','RightPanel', ...
-                     'BackgroundColor', [0.94 0.94 0.94]);
-rightGrid = uigridlayout(sidePanel2, [5, 1]); % Define sections for topoplots and other controls
-
+    % Create panel for side menu
+    sidePanel2 = uipanel('Parent', mainFig, ...
+                       'Position', [ 0.8 0 0.2 1], ...
+                       'Tag','RightPanel',...
+                       'BackgroundColor', [0.94 0.94 0.94]);
+    
     % Create panel for plot
     plotPanel = uipanel('Parent', mainFig, ...
                         'Tag','PlotPanel',...
@@ -54,8 +52,21 @@ rightGrid = uigridlayout(sidePanel2, [5, 1]); % Define sections for topoplots an
                 'Position', [0.1 0.05 0.8 0.4]);
 
     % Side panel ax for the topoplots
+    
+    % Channel Locations (always)
     axes3 = axes('Parent', sidePanel2, ...
-                'Position', [0.1 0.7 0.8 0.2]);
+                'Position', [0.1 0.10 0.8 0.2]);
+
+    % Peak
+    axes4 = axes('Parent', sidePanel2, ...
+                'Position', [0.1 0.40 0.35 0.25]);
+    % Valley
+    axes5 = axes('Parent', sidePanel2, ...
+                'Position', [0.55 0.40 0.35 0.25]);
+    
+    % ERP topoplot
+    axes6 = axes('Parent', sidePanel2, ...
+                'Position', [0.1 0.10 0.8 0.25]);
 
     middlePanel = uipanel('Parent', plotPanel, ...
                 'Tag','PlotPanel2',...
@@ -63,10 +74,12 @@ rightGrid = uigridlayout(sidePanel2, [5, 1]); % Define sections for topoplots an
 
     %middleLayout = uigridlayout(middlePanel, [2 1]);
     % Excel preview
-    tableData = {'P1',0,0,0,0,};
-    columnNames = {'Component', 'Start', 'End', 'Peak', 'Latency', 'Avg Power'};
+    componentList = {'P1';'N1';'P2';'N2';'P3';'P3b';'VAN';'VAN-c'};
+    numComponents = numel(componentList);
+    tableData = [componentList, repmat({[]}, numComponents, 8)];
+    columnNames = {'Comp.', 'Start', 'End', '+ Peak (µV)', '+ Latency(s)', '- Peak(µV)', '- Latency (s)', 'Avg Power','Rater','Task','Event #','Lab'};
     componentsTable = uitable(middlePanel, 'Data', tableData, ...
-        'ColumnName', columnNames, ...
+        'Col4umnName', columnNames, ...
         'ColumnEditable', true, ...
         'Units', 'normalized', ...
        'Position', [0 0 1 1]); % Fill the entire middlePanel);
@@ -118,11 +131,11 @@ rightGrid = uigridlayout(sidePanel2, [5, 1]); % Define sections for topoplots an
                        'Callback', @updatePlot);
     
     % Channel/Component Selection Section
-    createLabel(sidePanel, 'Available Channels/ICs:', 20, 340);
+    createLabel(sidePanel, 'Available Channels/ICs:', 20, 360);
     channelList = uicontrol('Parent', sidePanel, ...
                              'Style', 'listbox', ...
                              'String', {'Select a file first'}, ...
-                             'Position', [20 240 80 100], ...
+                             'Position', [20 260 80 100], ...
                              'Max', 2, ... % Enable multiple selection
                              'Value', 1);%, ...
                              %'Callback', @updateTopoplots2);
@@ -138,65 +151,83 @@ rightGrid = uigridlayout(sidePanel2, [5, 1]); % Define sections for topoplots an
     forwardBtn = uicontrol('Parent', sidePanel, ...
                           'Style', 'pushbutton', ...
                           'String', '>>', ...
-                          'Position', [105 280 30 20], ...
+                          'Position', [105 300 30 20], ...
                           'Callback', @moveForward);
                           
     backwardBtn = uicontrol('Parent', sidePanel, ...
                            'Style', 'pushbutton', ...
                            'String', '<<', ...
-                           'Position', [105 260 30 20], ...
+                           'Position', [105 280 30 20], ...
                            'Callback', @moveBackward);
                            
     % Add rejected list
     rejectedList = uicontrol('Parent', sidePanel, ...
                             'Style', 'listbox', ...
                             'String', {}, ...
-                            'Position', [140 240 80 100], ...
-                            'Max', 2)%, ...
+                            'Position', [140 260 80 100], ...
+                            'Max', 2);%, ...
                             %'Callback', @updateTopoplots2);
     
     % Select All/None Buttons for Channels
     selectAll = uicontrol('Parent', sidePanel, ...
                          'Style', 'pushbutton', ...
                          'String', 'Select All', ...
-                         'Position', [20 210 95 30], ...
+                         'Position', [20 230 95 30], ...
                          'Callback', {@selectChannels, 'all'});
     
     selectNone = uicontrol('Parent', sidePanel, ...
                           'Style', 'pushbutton', ...
                           'String', 'Select None', ...
-                          'Position', [125 210 95 30], ...
+                          'Position', [125 230 95 30], ...
                           'Callback', {@selectChannels, 'none'});
     
     % Data Type Toggle
     dataTypeToggle = uicontrol('Parent', sidePanel, ...
                               'Style', 'togglebutton', ...
                               'String', 'Show Component ERPs', ...
-                              'Position', [20 160 200 30], ...
+                              'Position', [20 200 200 30], ...
                               'Value', 0, ...
                               'Callback', @dataTypeToggled);
 
-    createLabel(sidePanel, 'Data Modification:', 20, 140);
+    createLabel(sidePanel, 'Rater:', 20, 180);
 
+    raterName = uicontrol('Parent', sidePanel, ...
+                            'Style', 'edit', ...
+                            'Tag','Rater',...
+                            'String', '', ...
+                            'Position', [20 160 200 20], ...
+                            'Callback', @raterSelected);
+
+    createLabel(sidePanel, 'Select Component:', 20, 140);
+    
+    componentList = {'P1','N1','P2','N2','P3','P3b','VAN','VAN-c'};
+
+    componentDropdown = uicontrol('Parent', sidePanel, ...
+                            'Style', 'popupmenu', ...
+                            'Tag','Components',...
+                            'String', componentList, ...
+                            'Value', 1,...
+                            'Position', [20 110 200 30], ...
+                            'Callback', @componentSelected);
     
     mouse_x = uicontrol('Parent', sidePanel, ...
                             'Style', 'text', ...
                             'String', 'Mouse X', ...
                             'Tag','MouseX',...
-                            'Position', [20 110 95 30]);
+                            'Position', [20 80 95 30]);
 
     mouse_y = uicontrol('Parent', sidePanel, ...
                             'Style', 'text', ...
                             'String', 'Mouse Y', ...
                             'Tag','MouseY',...
-                            'Position', [125 110 95 30]);
+                            'Position', [125 80 95 30]);
 %                             
     % Save Section
-    createLabel(sidePanel, 'Save Suffix:', 20, 80);
+    createLabel(sidePanel, 'Save Suffix:', 20, 60);
     suffixBox = uicontrol('Parent', sidePanel, ...
                          'Style', 'edit', ...
                          'String', 'New', ...
-                         'Position', [20 60 200 20]);
+                         'Position', [20 40 200 20]);
 
     %createLabel(sidePanel, 'Save Dataset:', 20, 60);
     saveButton = uicontrol('Parent', sidePanel, ...
@@ -210,11 +241,18 @@ rightGrid = uigridlayout(sidePanel2, [5, 1]); % Define sections for topoplots an
     userData.mouse_y = mouse_y;
     % Store handles and data in figure UserData
     userData.axes1 = axes1;
-%     userData.axes2 = axes2;
-%     userData.axes3 = axes3;
-%     userData.axes4 = axes4;
-%     userData.axes5 = axes5;
-%     userData.axes6 = axes6;
+    userData.axes2 = axes2;
+    userData.axes3 = axes3;
+    userData.axes4 = axes4;
+    userData.axes5 = axes5;
+    userData.axes6 = axes6;
+
+    % for Component button
+    userData.current_component = 'P1';
+    userData.current_component_val = 1;
+
+    % for rater name
+    userData.rater = '';
 
     userData.availableList = channelList;
     userData.rejectedList = rejectedList;
@@ -264,7 +302,7 @@ function plotChannelLocations(mainFig)
 
 userData = get(mainFig,'UserData');
 EEG = userData.currentEEG;
-%ax = userData.axes3;
+ax = userData.axes3;
 topoplot([],EEG.chanlocs, 'style', 'blank',  'electrodes', 'labelpoint', 'chaninfo', EEG.chaninfo);
 
 end
@@ -273,6 +311,7 @@ function saveDataset(source, ~)
     mainFig = getMainFigure(source);
     userData = get(mainFig, 'UserData');
     
+    % Check if there is a current EEG
     if isempty(userData.currentEEG)
         return;
     end
@@ -288,28 +327,20 @@ function saveDataset(source, ~)
     % Split the filename and extension
     [~, name, ext] = fileparts(currentFile);
     
-    % Create new filename with suffix
-    if ~isempty(suffix)
-        newFilename = [name '_' suffix ext];
-    else
-        newFilename = [name '_modified' ext];
-    end
+    % Construct the base name for the table file
+    baseName = [name suffix];
     
-    % Save the dataset in the current directory
-    try
-        EEG = userData.tempEEG;
-        EEG = pop_saveset(EEG, 'filename', newFilename, 'filepath', pwd);
-        reloadDirectory(source);
-        %loadNewFile(source,newFilename);
-        
-        %Load new file
-        sprintf('File Saved Sucessfully as : %s',newFilename);
-        
-        %msgbox(['File saved as: ' newFilename], 'Save Successful');
-    catch err
-
-        errordlg(['Error saving file: ' err.message], 'Error');
-    end
+    % Construct the full file name for the table
+    tableFileName = [baseName '.xlsx'];  % You can change the extension to '.txt', '.dat', etc.
+    
+    % Save the componentsTable to the file using writetable
+    componentsTable = userData.componentsTable.Data;
+    componentsColumnNames = userData.componentsTable.ColumnName;
+    finalTable = array2table(componentsTable,'VariableNames',componentsColumnNames);
+    writetable(finalTable, tableFileName);
+    
+    % Optionally, display a message to confirm the save
+    disp(['Table saved to ' tableFileName]);
 end
 
 function loadNewFile(source,filename)
@@ -392,7 +423,7 @@ end
         set(mainFig, 'UserData', userData);
 
         % Plot topoplots
-        plotChannelLocations(mainFig);
+        %plotChannelLocations(mainFig);
 
         updatePlot(source, []);
         
@@ -402,7 +433,7 @@ end
 end
 
 % Modified updateTopoplots function with loop prevention
-function updateTopoplots(mainFig, clickedTime, label)
+function updateTopoplots(mainFig, clickedTime,label)
     userData = get(mainFig, 'UserData');
     
     % Check if we're already updating topoplots to prevent infinite loop
@@ -432,44 +463,44 @@ function updateTopoplots(mainFig, clickedTime, label)
         
         % Get ERP data for both original and preview
         [origData, ~] = getERPData(userData.originalEEG, selectedEvents, times);
-        [prevData, ~] = getERPData(userData.tempEEG, selectedEvents, times);
+        %[prevData, ~] = getERPData(userData.tempEEG, selectedEvents, times);
         
         % Plot original data topoplot
-        axes(userData.axes4);
-        cla(userData.axes4);
+        axes(userData.axes6);
+        cla(userData.axes6);
         if ~isempty(userData.originalEEG.chanlocs)
             topoplot(origData(:, timeIdx), userData.originalEEG.chanlocs, ...
                     'electrodes', 'on', 'style', 'map');
-            title(sprintf('Original at %.0f ms', clickedTime));
+            title(sprintf('%s Component at %.0f ms',label, clickedTime));
             colorbar;
         end
         
         % Plot preview data topoplot
-        axes(userData.axes5);
-        cla(userData.axes5);
-        if ~isempty(userData.tempEEG.chanlocs)
-            topoplot(prevData(:, timeIdx), userData.tempEEG.chanlocs, ...
-                    'electrodes', 'on', 'style', 'map');
-            title(sprintf('Preview at %.0f ms', clickedTime));
-            colorbar;
-        end
+%         axes(userData.axes5);
+%         cla(userData.axes5);
+%         if ~isempty(userData.tempEEG.chanlocs)
+%             topoplot(prevData(:, timeIdx), userData.tempEEG.chanlocs, ...
+%                     'electrodes', 'on', 'style', 'map');
+%             title(sprintf('Preview at %.0f ms', clickedTime));
+%             colorbar;
+%         end
         
         % Update component topoplot if in component mode
-        if get(userData.dataTypeToggle, 'Value') && isfield(userData.currentEEG, 'icaact')
-            axes(userData.axes6);
-            cla(userData.axes6);
-            
-            chanorcomp = str2double(label(3:end));
-            if ~isempty(userData.currentEEG.chanlocs)
-                topoplot(userData.currentEEG.icawinv(:,chanorcomp), userData.currentEEG.chanlocs, ...
-                    'chaninfo', userData.currentEEG.chaninfo, 'electrodes','on'); axis square;
-
-                title(['IC' num2str(chanorcomp)]);
-                %topoplot([], userData.currentEEG.chanlocs, 'style', 'blank', ...
-                %        'electrodes', 'labelpoint', 'chaninfo', userData.currentEEG.chaninfo);
-                %title('Channel Locations');
-            end
-        end
+%         if get(userData.dataTypeToggle, 'Value') && isfield(userData.currentEEG, 'icaact')
+%             axes(userData.axes6);
+%             cla(userData.axes6);
+%             
+%             chanorcomp = str2double(label(3:end));
+%             if ~isempty(userData.currentEEG.chanlocs)
+%                 topoplot(userData.currentEEG.icawinv(:,chanorcomp), userData.currentEEG.chanlocs, ...
+%                     'chaninfo', userData.currentEEG.chaninfo, 'electrodes','on'); axis square;
+% 
+%                 title(['IC' num2str(chanorcomp)]);
+%                 %topoplot([], userData.currentEEG.chanlocs, 'style', 'blank', ...
+%                 %        'electrodes', 'labelpoint', 'chaninfo', userData.currentEEG.chaninfo);
+%                 %title('Channel Locations');
+%             end
+%         end
     catch err
         warning('Error in updateTopoplots: %s', err.message);
     end
@@ -638,6 +669,7 @@ function updatePlot(source, ~)
     timeWindow = [startTime endTime];
     
     % Get rejected items
+    selectedItems = get(userData.channelList, 'String');
     rejectedItems = get(userData.rejectedList, 'String');
     
     % Create temporary EEG with rejections applied
@@ -652,15 +684,18 @@ function updatePlot(source, ~)
     % For original data (topo plot)
     axes(userData.axes1);
 
+    selectedItems_array = cellfun(@(x) str2double(x), selectedItems);
+
     if get(userData.dataTypeToggle, 'Value') && isfield(userData.currentEEG, 'icaact')
-        plotComponentERP(userData.originalEEG, selectedEvent, timeWindow, 1:size(userData.originalEEG.icaact, 1));
+        plotComponentERP(userData.originalEEG, selectedEvent, timeWindow, selectedItems_array);
     else
-        meanERP = plotEventERP(userData.originalEEG, selectedEvent, timeWindow, 1:userData.originalEEG.nbchan);
+        meanERP = plotEventERP(userData.originalEEG, selectedEvent, timeWindow, selectedItems_array);
     end
-    userData.meanERP = meanERP;
+    
+    userData.meanERP = meanERP; % THIS WILL BE TROUBLE LATER!!!!
     title('Original Data');
     
-    % For modified data (bottom plot)
+%    % For modified data (bottom plot)
 %     axes(userData.axes2);
 %     if ~isempty(rejectedItems)
 %         % Separate ICs and channels
@@ -908,6 +943,8 @@ function moveForward(source, ~)
     
     % Update rejected list
     set(userData.rejectedList, 'String', rejStr);
+    set(userData.rejectedList, 'Value', []);
+    set(userData.availableList, 'Value', []);
     
     % Update available list
     updateChannelList(mainFig);
@@ -984,16 +1021,37 @@ function startDragSelection(src, ~)
         [maxVal, maxIdx] = max(abs(selectedData(:)));
         [relTimeIdx, chanIdx] = ind2sub(size(selectedData), maxIdx); % Get relative time index in selectedData
         peak = selectedData(relTimeIdx, chanIdx);
-        latency = binToRealTime(relTimeIdx, srate, startTime_og);
+        latency = xStart;
         mainFig.UserData.componentsTable.Data{4} = peak;
         mainFig.UserData.componentsTable.Data{5} = latency;
 
         % Plot X on the region
-        yLimits = ax.YLim;
+        % Get the x and y limits of the axes
+        xLimits = xlim(ax);
+        yLimits = ylim(ax);
+
+        % Define cross length as a fraction of the x and y range
+        crossLengthX = 10; % 5% of x-axis range
+        crossLengthY = 1; % 5% of y-axis range
         % Remove any existing selection patch
         delete(findobj(ax, 'Tag', 'SelectionPeak'));
-        patch(ax,[xStart xStart xStart xStart], [yLimits(1) yLimits(2) yLimits(2) yLimits(1)], ...
-            'MarkerSize',10, 'Tag', 'SelectionPeak')
+        hold(ax,"on");
+        %line(ax,[xStart,xStart],[yLimits(1), yLimits(2)], 'Tag', 'SelectionPeak')
+
+        % Define the length of each arm of the cross
+        crossLength = 1; % Adjust this value to change the size of the cross
+        
+        % Plot vertical line of the cross
+        line(ax, [xStart, xStart], [yStart - crossLengthY, yStart + crossLengthY], ...
+            'Tag', 'SelectionPeak', 'Color', 'r', 'LineWidth', 1.5); % Vertical line
+        
+        % Plot horizontal line of the cross
+        line(ax, [xStart - crossLengthX, xStart + crossLengthX], [yStart, yStart], ...
+            'Tag', 'SelectionPeak', 'Color', 'r', 'LineWidth', 1.5); % Horizontal line
+
+        
+        %patch(ax,[xStart xStart xStart xStart], [yLimits(1) yLimits(2) yLimits(2) yLimits(1)], ...
+        %    'MarkerSize',10, 'Tag', 'SelectionPeak')
         
         %patch(ax, [xStart xStart xEnd xEnd], [yLimits(1) yLimits(2) yLimits(2) yLimits(1)], ...
         %   [.3 .6 1], 'FaceAlpha', 0.2, 'EdgeColor', 'none', 'Tag', 'SelectionPatch');
@@ -1021,6 +1079,59 @@ function bin = realTimeToBin(realTime, srate, startTime)
     bin = round(((realTime - startTime) / 1000) * srate) + 1;
 end
 
+function raterSelected(src,~)
+
+mainFig = getMainFigure(src);
+rater = src.String;
+
+mainFig.UserData.rater = rater;
+
+end
+
+function componentSelected(src,~)
+
+mainFig = getMainFigure(src);
+val = src.Value;
+component = src.String(val);
+
+mainFig.UserData.current_component = component;
+mainFig.UserData.current_component_val = val;
+
+
+end
+
+function cmap = create_colormap()
+
+% Define electrode positions (as an example, create some dummy data)
+numChannels = 64; % Number of channels
+theta = linspace(0, 2 * pi, numChannels + 1); % Equally spaced around a circle
+theta(end) = []; % Remove the last point to avoid overlap
+x = cos(theta); % X-coordinates for each channel
+y = sin(theta); % Y-coordinates for each channel
+
+% Create a color map to represent the spatial distribution
+cmap = jet(numChannels); % 'jet' gives a rainbow-like color gradient
+
+% Plot each electrode with its assigned color
+figure;
+hold on;
+for i = 1:numChannels
+    plot(x(i), y(i), 'o', 'MarkerSize', 8, 'MarkerFaceColor', cmap(i,:), ...
+        'MarkerEdgeColor', cmap(i,:));
+end
+hold off;
+
+% Enhance plot appearance
+axis equal;
+set(gca, 'Color', 'k'); % Set background color to black for contrast
+title('Electrode Channel Layout with MNE-like Color Pattern');
+xlabel('X Position');
+ylabel('Y Position');
+colorbar;
+colormap(cmap); % Add color bar to show the color gradient used
+
+end
+
 function updateComponentInfo(src,startTime, endTime)
     % Get data within selection
     mainFig = getMainFigure(src);
@@ -1041,46 +1152,66 @@ function updateComponentInfo(src,startTime, endTime)
     selectedData = data(startBin:endBin, :);
         
     % Calculate metrics
-    [maxVal, maxIdx] = max(abs(selectedData(:))); % Find peak value and its index in the subset
+    [maxVal, maxIdx] = max(selectedData(:)); % Find peak value and its index in the subset
     [relTimeIdx, chanIdx] = ind2sub(size(selectedData), maxIdx); % Get relative time index in selectedData
-    peak = selectedData(relTimeIdx, chanIdx);
+    peak_pos = selectedData(relTimeIdx, chanIdx);
     
     % Map relative index back to absolute time
-    latency = binToRealTime(relTimeIdx + startBin, srate, startTime_og);
+    latency_pos = binToRealTime(relTimeIdx + startBin, srate, startTime_og);
+
+    [maxVal, maxIdx] = min(selectedData(:)); % Find peak value and its index in the subset
+    [relTimeIdx, chanIdx] = ind2sub(size(selectedData), maxIdx); % Get relative time index in selectedData
+    peak_neg = selectedData(relTimeIdx, chanIdx);
+    
+    % Map relative index back to absolute time
+    latency_neg = binToRealTime(relTimeIdx + startBin, srate, startTime_og);
     
     % Calculate average power in selected data range
     avgPower = mean(selectedData(:).^2);
+
+    % Decide row value, i.e. Component
+    row = mainFig.UserData.current_component_val;
+
+    %get Rater's name
+    rater = get(findobj(mainFig, 'Tag','Rater'),'String');
     
     % Update info fields
-    mainFig.UserData.componentsTable.Data{2} = startTime;
-    mainFig.UserData.componentsTable.Data{3} = endTime;
-    mainFig.UserData.componentsTable.Data{4} = peak;
-    mainFig.UserData.componentsTable.Data{5} = latency;
-    mainFig.UserData.componentsTable.Data{6} = avgPower;
+    mainFig.UserData.componentsTable.Data{row,2} = startTime;
+    mainFig.UserData.componentsTable.Data{row,3} = endTime;
+    mainFig.UserData.componentsTable.Data{row,4} = peak_pos;
+    mainFig.UserData.componentsTable.Data{row,5} = latency_pos;
+    mainFig.UserData.componentsTable.Data{row,6} = peak_neg;
+    mainFig.UserData.componentsTable.Data{row,7} = latency_neg;
+    mainFig.UserData.componentsTable.Data{row,8} = avgPower;
+    mainFig.UserData.componentsTable.Data{row,9} = rater;
+
+    updateTopoplots(mainFig, latency_pos,mainFig.UserData.componentsTable.Data{row,1})
 
 end
 
 function mouseMove(src, ~)
     % Retrieve the handle to the target axes
     %try
-    ax = src.UserData.axes1; % Adjust if there are multiple axes
-    cp = get(ax, 'CurrentPoint'); % Current mouse position
-    
-    % Get axis limits
-    xLimits = get(ax, 'XLim');
-    yLimits = get(ax, 'YLim');
-    
-    % Check if mouse is within the axis limits
-    if cp(1,1) >= xLimits(1) && cp(1,1) <= xLimits(2) && ...
-       cp(1,2) >= yLimits(1) && cp(1,2) <= yLimits(2)
-        % Update only if within plot area
-        set(findobj(src, 'Tag', 'MouseX'), 'String', num2str(cp(1,1)));
-        set(findobj(src, 'Tag', 'MouseY'), 'String', num2str(cp(1,2)));
-    else
-        % Optionally, clear or hide the display when outside plot
-        set(findobj(src, 'Tag', 'MouseX'), 'String', '');
-        set(findobj(src, 'Tag', 'MouseY'), 'String', '');
-    end
+%     if ~isempty(src.UserData)
+%         ax = src.UserData.axes1; % Adjust if there are multiple axes
+%         cp = get(ax, 'CurrentPoint'); % Current mouse position
+%         
+%         % Get axis limits
+%         xLimits = get(ax, 'XLim');
+%         yLimits = get(ax, 'YLim');
+%         
+%         % Check if mouse is within the axis limits
+%         if cp(1,1) >= xLimits(1) && cp(1,1) <= xLimits(2) && ...
+%            cp(1,2) >= yLimits(1) && cp(1,2) <= yLimits(2)
+%             % Update only if within plot area
+%             set(findobj(src, 'Tag', 'MouseX'), 'String', num2str(cp(1,1)));
+%             set(findobj(src, 'Tag', 'MouseY'), 'String', num2str(cp(1,2)));
+%         else
+%             % Optionally, clear or hide the display when outside plot
+%             set(findobj(src, 'Tag', 'MouseX'), 'String', '');
+%             set(findobj(src, 'Tag', 'MouseY'), 'String', '');
+%         end
+%     end
     %catch
     %end
 end
