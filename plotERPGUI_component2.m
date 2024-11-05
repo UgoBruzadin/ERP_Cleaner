@@ -652,7 +652,8 @@ cla(userData.axes1);
 
 % Plot in both axes
 % For original data (topo plot)
-axes(userData.axes1);
+ax = axes(userData.axes1);
+hold(ax,"on")
 
 if get(userData.dataTypeToggle, 'Value') && isfield(userData.currentEEG, 'icaact')
     plotComponentERP(userData.originalEEG, selectedEvent, timeWindow, 1:size(userData.originalEEG.icaact, 1));
@@ -661,6 +662,8 @@ else
 end
 userData.meanERP = meanERP;
 title('Original Data');
+ax = axes(userData.axes1);
+hold(ax,"off")
 
 % For modified data (bottom plot)
 %     axes(userData.axes2);
