@@ -55,18 +55,15 @@ function plotERPGUI_component(events)
     
     % Channel Locations (always)
     axes3 = axes('Parent', sidePanel2, ...
-                'Position', [0.1 0.10 0.8 0.2]);
-
-    % Peak
-    axes4 = axes('Parent', sidePanel2, ...
-                'Position', [0.1 0.40 0.35 0.25]);
-    % Valley
-    axes5 = axes('Parent', sidePanel2, ...
-                'Position', [0.55 0.40 0.35 0.25]);
+                'Position', [0.1 0.75 0.8 0.28],'Tag','TopoplotCHANS');
     
-    % ERP topoplot
-    axes6 = axes('Parent', sidePanel2, ...
-                'Position', [0.1 0.10 0.8 0.25]);
+    % ERP topoplot PEAK
+    axes4 = axes('Parent', sidePanel2, ...
+                'Position', [0.1 0.4 0.8 0.28],'Tag','TopoplotPEAK');
+
+    % ERP topoplot VALLEY
+    axes5 = axes('Parent', sidePanel2, ...
+                'Position', [0.1 0.05 0.8 0.28],'Tag','TopoplotVALLEY');
 
     middlePanel = uipanel('Parent', plotPanel, ...
                 'Tag','PlotPanel2',...
@@ -76,10 +73,11 @@ function plotERPGUI_component(events)
     % Excel preview
     componentList = {'P1';'N1';'P2';'N2';'P3';'P3b';'VAN';'VAN-c'};
     numComponents = numel(componentList);
-    tableData = [componentList, repmat({[]}, numComponents, 8)];
-    columnNames = {'Comp.', 'Start', 'End', '+ Peak (µV)', '+ Latency(s)', '- Peak(µV)', '- Latency (s)', 'Avg Power','Rater','Task','Event #','Lab'};
+    %tableData = [componentList, repmat({[]}, numComponents, 11)];
+    columnNames = {'Comp.', 'Start', 'End', '+ Peak (µV)', '+ Latency(s)', '- Peak(µV)', '- Latency (s)', 'Avg Power','Rater','Task','Subject','Event #','Lab'};
+    tableData = [componentList, repmat({[]}, numComponents, size(columnNames,1))];
     componentsTable = uitable(middlePanel, 'Data', tableData, ...
-        'Col4umnName', columnNames, ...
+        'ColumnName', columnNames, ...
         'ColumnEditable', true, ...
         'Units', 'normalized', ...
        'Position', [0 0 1 1]); % Fill the entire middlePanel);
@@ -95,7 +93,7 @@ function plotERPGUI_component(events)
                             'String', fileNames, ...
                             'Value', 1,...
                             'Position', [20 550 200 30], ...
-                            'Callback', @fileSelected);
+                            'Callback', @loadFileSelected);
 
     % File Selection Section
     %createLabel(sidePanel, 'Select EEG File:', 20, 580);
@@ -207,8 +205,13 @@ function plotERPGUI_component(events)
                             'Tag','Components',...
                             'String', componentList, ...
                             'Value', 1,...
-                            'Position', [20 110 200 30], ...
+                            'Position', [20 110 100 30], ...
                             'Callback', @componentSelected);
+    c = jet(8);
+
+    colorRectangle = uipanel('Parent', sidePanel, ...
+        'ForegroundColor',c(1,:), ...
+        'Position',[125 110 100 30]);
     
     mouse_x = uicontrol('Parent', sidePanel, ...
                             'Style', 'text', ...
@@ -235,7 +238,9 @@ function plotERPGUI_component(events)
                           'String', 'Save', ...
                           'Position', [20 10 200 30], ...
                           'Callback', @saveDataset);
-    
+    % Color maps
+    userData.colorRectangle = colorRectangle;
+    userData.cmap = c;
     % mouse positions handles
     userData.mouse_x = mouse_x;
     userData.mouse_y = mouse_y;
@@ -245,11 +250,12 @@ function plotERPGUI_component(events)
     userData.axes3 = axes3;
     userData.axes4 = axes4;
     userData.axes5 = axes5;
-    userData.axes6 = axes6;
+%     userData.axes6 = axes6;
 
     % for Component button
-    userData.current_component = 'P1';
+    userData.current_component = {'P1'};
     userData.current_component_val = 1;
+    userData.componentDropdown = componentDropdown;
 
     % for rater name
     userData.rater = '';
@@ -302,8 +308,13 @@ function plotChannelLocations(mainFig)
 
 userData = get(mainFig,'UserData');
 EEG = userData.currentEEG;
-ax = userData.axes3;
+axes(userData.axes3);
+
+cla(userData.axes3);
+
+hold(userData.axes3,'on');
 topoplot([],EEG.chanlocs, 'style', 'blank',  'electrodes', 'labelpoint', 'chaninfo', EEG.chaninfo);
+hold(userData.axes3,'off');
 
 end
 
@@ -349,8 +360,11 @@ mainFig = getMainFigure(source);
 userData = get(mainFig,'UserData');
 val = find(strcmp(userData.fileDropdown.String,filename));
 userData.fileDropdown.Value = val;
-fileSelected(findobj(mainFig,'Tag','Files'));
+loadFileSelected(findobj(mainFig,'Tag','Files'));
 reloadDirectory(source);
+
+% BUG IN CHAN LOCATIONS
+%plotChannelLocations(mainFig);
 
 
 end
@@ -366,7 +380,7 @@ function createLabel(parent, text, x, y)
 end
 
 % Callback for file selection
-function fileSelected(source, ~)
+function loadFileSelected(source, ~)
 
 try 
     mainFig = getMainFigure(source);
@@ -415,6 +429,12 @@ end
         set(userData.rejectedList, 'Value', []); % Clear selection
         set(userData.rejectedList, 'String', {});
         newChoiceStringsValues = [];
+
+        % Clear compomnent table
+        componentList = userData.componentDropdown.String;
+        columnNames = {'Comp.', 'Start', 'End', '+ Peak (µV)', '+ Latency(s)', '- Peak(µV)', '- Latency (s)', 'Avg Power','Rater','Task','Event #','Lab'};
+        tableData = [componentList, repmat({[]}, numel(componentList), size(columnNames,1))];
+        userData.componentsTable.Data = tableData;
         
         % Update channel list based on current mode
         updateChannelList(mainFig);
@@ -423,7 +443,7 @@ end
         set(mainFig, 'UserData', userData);
 
         % Plot topoplots
-        %plotChannelLocations(mainFig);
+        plotChannelLocations(mainFig);
 
         updatePlot(source, []);
         
@@ -432,8 +452,8 @@ end
     end
 end
 
-% Modified updateTopoplots function with loop prevention
-function updateTopoplots(mainFig, clickedTime,label)
+
+function updateTopoplot(mainFig, clickedTime,ax,label,thistitle)
     userData = get(mainFig, 'UserData');
     
     % Check if we're already updating topoplots to prevent infinite loop
@@ -458,49 +478,101 @@ function updateTopoplots(mainFig, clickedTime,label)
         % Calculate time indices based on current window settings
         startTime = str2double(get(userData.startTime, 'String'));
         endTime = str2double(get(userData.endTime, 'String'));
-        times = linspace(startTime, endTime, (endTime-startTime)*userData.currentEEG.srate/1000);
-        [~, timeIdx] = min(abs(times - clickedTime));
         
-        % Get ERP data for both original and preview
-        [origData, ~] = getERPData(userData.originalEEG, selectedEvents, times);
+        times1 = linspace(startTime, endTime, (endTime-startTime)*userData.currentEEG.srate/1000);
+        [~, timeIdx] = min(abs(times1 - clickedTime));
+        
+        % Get ERP data for peak
+        [origData, ~] = getERPData(userData.originalEEG, selectedEvents, times1);
         %[prevData, ~] = getERPData(userData.tempEEG, selectedEvents, times);
         
         % Plot original data topoplot
-        axes(userData.axes6);
-        cla(userData.axes6);
+        axes(ax);
+        cla(ax);
+        hold(ax,"on")
         if ~isempty(userData.originalEEG.chanlocs)
             topoplot(origData(:, timeIdx), userData.originalEEG.chanlocs, ...
                     'electrodes', 'on', 'style', 'map');
-            title(sprintf('%s Component at %.0f ms',label, clickedTime));
+            title(sprintf('%s %s at %.0f ms',label,thistitle,clickedTime));
             colorbar;
         end
+        hold(ax,"off")
+
+    catch err
+        warning('Error in updateTopoplot: %s', err.message);
+    end
+    
+    % Clear the update flag
+    userData.updatingTopoplots = false;
+    set(mainFig, 'UserData', userData);
+end
+
+% Modified updateTopoplots function with loop prevention
+function updateTopoplots(mainFig, clickedTime1,clickedTime2,label)
+    userData = get(mainFig, 'UserData');
+    
+    % Check if we're already updating topoplots to prevent infinite loop
+    if isfield(userData, 'updatingTopoplots') && userData.updatingTopoplots
+        return;
+    end
+    
+    % Set flag to prevent recursive calls
+    userData.updatingTopoplots = true;
+    set(mainFig, 'UserData', userData);
+    
+    try
+        if isempty(userData.currentEEG) || isempty(userData.tempEEG)
+            return;
+        end
         
-        % Plot preview data topoplot
-%         axes(userData.axes5);
-%         cla(userData.axes5);
-%         if ~isempty(userData.tempEEG.chanlocs)
-%             topoplot(prevData(:, timeIdx), userData.tempEEG.chanlocs, ...
-%                     'electrodes', 'on', 'style', 'map');
-%             title(sprintf('Preview at %.0f ms', clickedTime));
-%             colorbar;
-%         end
+        % Get the current event types
+        eventList = get(userData.eventList, 'String');
+        selectedEventIdx = get(userData.eventList, 'Value');
+        selectedEvents = eventList(selectedEventIdx);
         
-        % Update component topoplot if in component mode
-%         if get(userData.dataTypeToggle, 'Value') && isfield(userData.currentEEG, 'icaact')
-%             axes(userData.axes6);
-%             cla(userData.axes6);
-%             
-%             chanorcomp = str2double(label(3:end));
-%             if ~isempty(userData.currentEEG.chanlocs)
-%                 topoplot(userData.currentEEG.icawinv(:,chanorcomp), userData.currentEEG.chanlocs, ...
-%                     'chaninfo', userData.currentEEG.chaninfo, 'electrodes','on'); axis square;
-% 
-%                 title(['IC' num2str(chanorcomp)]);
-%                 %topoplot([], userData.currentEEG.chanlocs, 'style', 'blank', ...
-%                 %        'electrodes', 'labelpoint', 'chaninfo', userData.currentEEG.chaninfo);
-%                 %title('Channel Locations');
-%             end
-%         end
+        % Calculate time indices based on current window settings
+        startTime = str2double(get(userData.startTime, 'String'));
+        endTime = str2double(get(userData.endTime, 'String'));
+        
+        times1 = linspace(startTime, endTime, (endTime-startTime)*userData.currentEEG.srate/1000);
+        [~, timeIdx] = min(abs(times1 - clickedTime1));
+        
+        % Get ERP data for peak
+        [origData, ~] = getERPData(userData.originalEEG, selectedEvents, times1);
+        %[prevData, ~] = getERPData(userData.tempEEG, selectedEvents, times);
+        
+        % Plot original data topoplot
+        axes(userData.axes4);
+        cla(userData.axes4);
+        hold(userData.axes4,"on")
+        if ~isempty(userData.originalEEG.chanlocs)
+            topoplot(origData(:, timeIdx), userData.originalEEG.chanlocs, ...
+                    'electrodes', 'on', 'style', 'map');
+            title(sprintf('%s Peak at %.0f ms',label, clickedTime2));
+            colorbar;
+        end
+        hold(userData.axes4,"off")
+
+        [origData, ~] = getERPData(userData.originalEEG, selectedEvents, times1);
+
+        % Get ERP data for Valley
+        times2 = linspace(startTime, endTime, (endTime-startTime)*userData.currentEEG.srate/1000);
+        [~, timeIdx] = min(abs(times2 - clickedTime2));
+        
+        % Get ERP data for both original and preview
+        [origData, ~] = getERPData(userData.originalEEG, selectedEvents, times2);
+        % Plot original data topoplot
+        axes(userData.axes5);
+        cla(userData.axes5);
+        hold(userData.axes5,"on")
+        if ~isempty(userData.originalEEG.chanlocs)
+            topoplot(origData(:, timeIdx), userData.originalEEG.chanlocs, ...
+                    'electrodes', 'on', 'style', 'map');
+            title(sprintf('%s Valley at %.0f ms',label, clickedTime2));
+            colorbar;
+        end
+        hold(userData.axes5,"off")
+        
     catch err
         warning('Error in updateTopoplots: %s', err.message);
     end
@@ -983,81 +1055,133 @@ function startDragSelection(src, ~)
     ax = src.UserData.axes1;
     point1 = ax.CurrentPoint(1, 1:2);
 
-    if strcmp(src.SelectionType,'normal')
+    % Get the current x and y limits of the axis
+    xLimits = xlim(ax);
+    yLimits = ylim(ax);
+    
+    % Define the vertices of the rectangular region defined by the limits
+    vertices = [xLimits(1), yLimits(1); ...
+                xLimits(2), yLimits(1); ...
+                xLimits(2), yLimits(2); ...
+                xLimits(1), yLimits(2)];
+    
+    % Check if the current point is within the rectangular region
+    if inpolygon(point1(1), point1(2), vertices(:, 1), vertices(:, 2))
+    
+        if strcmp(src.SelectionType,'normal')
+    
+            rbbox;
+            point2 = ax.CurrentPoint(1, 1:2);
+            
+            % Calculate selection boundaries
+            xStart = min(point1(1), point2(1));
+            xEnd = max(point1(1), point2(1));
+            
+            % Update component info
+            updateComponentInfo(src,xStart, xEnd);
+            
+            % Highlight selected area
+            % Remove any existing selection patch
+            current_component = src.UserData.current_component;
+            delete(findobj(ax, 'Tag', ['SelectionPatch',current_component{:}]));
+            
+            % Create new selection patch
+            yLimits = ax.YLim;
+            color = src.UserData.cmap(src.UserData.current_component_val,:);
+            
+            patch(ax, [xStart xStart xEnd xEnd], [yLimits(1) yLimits(2) yLimits(2) yLimits(1)], ...
+                color, 'FaceAlpha', 0.2, 'EdgeColor', 'none', 'Tag', ['SelectionPatch',current_component{:}]);
+    
+        elseif strcmp(src.SelectionType,'alt')
 
-        rbbox;
-        point2 = ax.CurrentPoint(1, 1:2);
-        
-        % Calculate selection boundaries
-        xStart = min(point1(1), point2(1));
-        xEnd = max(point1(1), point2(1));
-        
-        % Update component info
-        updateComponentInfo(src,xStart, xEnd);
-        
-        % Highlight selected area
-        % Remove any existing selection patch
-        delete(findobj(ax, 'Tag', 'SelectionPatch'));
-        
-        % Create new selection patch
-        yLimits = ax.YLim;
-        patch(ax, [xStart xStart xEnd xEnd], [yLimits(1) yLimits(2) yLimits(2) yLimits(1)], ...
-            [.3 .6 1], 'FaceAlpha', 0.2, 'EdgeColor', 'none', 'Tag', 'SelectionPatch');
+            ax = src.UserData.axes1;
+            point1 = ax.CurrentPoint(1, 1:2);
+            data = mainFig.UserData.meanERP;
+            xStart = point1(1);
+            yStart = point1(2);
+    
+            % Change peak and latency
+            mainFig = getMainFigure(src);
+            startTime_og = str2double(mainFig.UserData.startTime.String);
+            srate = mainFig.UserData.currentEEG.srate;
+            startBin = realTimeToBin(point1,srate,startTime_og);
+    
+            selectedData = data(startBin, :);
+            [maxVal, maxIdx] = max(abs(selectedData(:)));
+            [relTimeIdx, chanIdx] = ind2sub(size(selectedData), maxIdx); % Get relative time index in selectedData
+            peak = selectedData(relTimeIdx, chanIdx);
+            latency = xStart;
 
-    elseif strcmp(src.SelectionType,'alt')
-        ax = src.UserData.axes1;
-        point1 = ax.CurrentPoint(1, 1:2);
-        data = mainFig.UserData.meanERP;
-        xStart = point1(1);
-        yStart = point1(2);
+            % Store data
+            row = mainFig.UserData.current_component_val;
+            mainFig.UserData.componentsTable.Data{row,4} = peak;
+            mainFig.UserData.componentsTable.Data{row,5} = latency;
+    
+            % Define cross length as a fraction of the x and y range
+            crossLengthX = 10; % 5% of x-axis range
+            crossLengthY = 1; % 5% of y-axis range
+            % Remove any existing selection patch
+            delete(findobj(ax, 'Tag', 'SelectionPeak'));
+            hold(ax,"on");
+            %line(ax,[xStart,xStart],[yLimits(1), yLimits(2)], 'Tag', 'SelectionPeak')
+    
+            % Define the length of each arm of the cross
+            crossLength = 1; % Adjust this value to change the size of the cross
+            
+            % Plot vertical line of the cross
+            line(ax, [xStart, xStart], [yStart - crossLengthY, yStart + crossLengthY], ...
+                'Tag', 'SelectionPeak', 'Color', 'r', 'LineWidth', 1); % Vertical line
+            % Plot horizontal line of the cross
+            line(ax, [xStart - crossLengthX, xStart + crossLengthX], [yStart, yStart], ...
+                'Tag', 'SelectionPeak', 'Color', 'r', 'LineWidth', 1); % Horizontal line
+    
+            updateTopoplot(mainFig, xStart,mainFig.UserData.axes4,mainFig.UserData.componentsTable.Data{row,1},'Peak')
+            
+        elseif strcmp(src.SelectionType,'extend')
+            
+            ax = src.UserData.axes1;
+            point1 = ax.CurrentPoint(1, 1:2);
+            data = mainFig.UserData.meanERP;
+            xStart = point1(1);
+            yStart = point1(2);
+    
+            % Change peak and latency
+            mainFig = getMainFigure(src);
+            startTime_og = str2double(mainFig.UserData.startTime.String);
+            srate = mainFig.UserData.currentEEG.srate;
+            startBin = realTimeToBin(point1,srate,startTime_og);
+    
+            selectedData = data(startBin, :);
+            [maxVal, maxIdx] = max(abs(selectedData(:)));
+            [relTimeIdx, chanIdx] = ind2sub(size(selectedData), maxIdx); % Get relative time index in selectedData
+            peak = selectedData(relTimeIdx, chanIdx);
+            latency = xStart;
 
-        % Change peak and latency
-        mainFig = getMainFigure(src);
-        startTime_og = str2double(mainFig.UserData.startTime.String);
-        srate = mainFig.UserData.currentEEG.srate;
-        startBin = realTimeToBin(point1,srate,startTime_og);
+            % Store data
+            row = mainFig.UserData.current_component_val;
+            mainFig.UserData.componentsTable.Data{row,6} = peak;
+            mainFig.UserData.componentsTable.Data{row,7} = latency;
+    
+            % Define cross length as a fraction of the x and y range
+            crossLengthX = 10; % 5% of x-axis range
+            crossLengthY = 1; % 5% of y-axis range
+            % Remove any existing selection patch
+            delete(findobj(ax, 'Tag', 'SelectionValley'));
+            hold(ax,"on");
+            %line(ax,[xStart,xStart],[yLimits(1), yLimits(2)], 'Tag', 'SelectionPeak')
+    
+            % Define the length of each arm of the cross
+            crossLength = 1; % Adjust this value to change the size of the cross
+            
+            % Plot vertical line of the cross
+            line(ax, [xStart, xStart], [yStart - crossLengthY, yStart + crossLengthY], ...
+                'Tag', 'SelectionValley', 'Color', 'b', 'LineWidth', 1); % Vertical line
+            % Plot horizontal line of the cross
+            line(ax, [xStart - crossLengthX, xStart + crossLengthX], [yStart, yStart], ...
+                'Tag', 'SelectionValley', 'Color', 'b', 'LineWidth', 1); % Horizontal line
 
-        selectedData = data(startBin, :);
-        [maxVal, maxIdx] = max(abs(selectedData(:)));
-        [relTimeIdx, chanIdx] = ind2sub(size(selectedData), maxIdx); % Get relative time index in selectedData
-        peak = selectedData(relTimeIdx, chanIdx);
-        latency = xStart;
-        mainFig.UserData.componentsTable.Data{4} = peak;
-        mainFig.UserData.componentsTable.Data{5} = latency;
-
-        % Plot X on the region
-        % Get the x and y limits of the axes
-        xLimits = xlim(ax);
-        yLimits = ylim(ax);
-
-        % Define cross length as a fraction of the x and y range
-        crossLengthX = 10; % 5% of x-axis range
-        crossLengthY = 1; % 5% of y-axis range
-        % Remove any existing selection patch
-        delete(findobj(ax, 'Tag', 'SelectionPeak'));
-        hold(ax,"on");
-        %line(ax,[xStart,xStart],[yLimits(1), yLimits(2)], 'Tag', 'SelectionPeak')
-
-        % Define the length of each arm of the cross
-        crossLength = 1; % Adjust this value to change the size of the cross
-        
-        % Plot vertical line of the cross
-        line(ax, [xStart, xStart], [yStart - crossLengthY, yStart + crossLengthY], ...
-            'Tag', 'SelectionPeak', 'Color', 'r', 'LineWidth', 1.5); % Vertical line
-        
-        % Plot horizontal line of the cross
-        line(ax, [xStart - crossLengthX, xStart + crossLengthX], [yStart, yStart], ...
-            'Tag', 'SelectionPeak', 'Color', 'r', 'LineWidth', 1.5); % Horizontal line
-
-        
-        %patch(ax,[xStart xStart xStart xStart], [yLimits(1) yLimits(2) yLimits(2) yLimits(1)], ...
-        %    'MarkerSize',10, 'Tag', 'SelectionPeak')
-        
-        %patch(ax, [xStart xStart xEnd xEnd], [yLimits(1) yLimits(2) yLimits(2) yLimits(1)], ...
-        %   [.3 .6 1], 'FaceAlpha', 0.2, 'EdgeColor', 'none', 'Tag', 'SelectionPatch');
-        
-    elseif strcmp(src.SelectionType,'extend')
-
+            updateTopoplot(mainFig, xStart,mainFig.UserData.axes5,mainFig.UserData.componentsTable.Data{row,1},'Valley')
+        end
     end
 end
 
@@ -1096,7 +1220,7 @@ component = src.String(val);
 
 mainFig.UserData.current_component = component;
 mainFig.UserData.current_component_val = val;
-
+mainFig.UserData.colorRectangle.BackgroundColor = mainFig.UserData.cmap(val,:);
 
 end
 
@@ -1185,8 +1309,50 @@ function updateComponentInfo(src,startTime, endTime)
     mainFig.UserData.componentsTable.Data{row,8} = avgPower;
     mainFig.UserData.componentsTable.Data{row,9} = rater;
 
-    updateTopoplots(mainFig, latency_pos,mainFig.UserData.componentsTable.Data{row,1})
+    % Lab, Task, Event #
+    fileList = get(mainFig.UserData.fileDropdown, 'String');
+    selectedIdx = get(mainFig.UserData.fileDropdown, 'Value');
+    currentFile = fileList{selectedIdx};
+    
+    % Split the filename and extension
+    [folder, name, ext] = fileparts(currentFile);
+    task = fastif(contains(name, 'IB'), 'IB', fastif(contains(name, 'BM'), 'BM', fastif(contains(name, 'DCF'), 'DCF', '')));
+    lab = fastif(contains(pwd, 'Reed'), 'Reed', fastif(contains(pwd, 'Chapman'), 'Chapman', fastif(contains(pwd, 'TelAviv'), 'TelAviv', '')));
+    name_splits = split(name,'_');
+    mainFig.UserData.componentsTable.Data{row,10} = task; % Ib BM or DCF
+    mainFig.UserData.componentsTable.Data{row,11} = name_splits{3}; % Sub ID
+    mainFig.UserData.componentsTable.Data{row,12} = strjoin(mainFig.UserData.eventChoiceStrings', ' '); % EVENTS
+    mainFig.UserData.componentsTable.Data{row,13} = lab; % 
 
+    % Plot upper and lower crux
+    
+    crossLengthX = 10; % 5% of x-axis range
+    crossLengthY = 1; % 5% of y-axis range
+    ax = mainFig.UserData.axes1;
+
+    delete(findobj('Tag', 'SelectionPeak'))
+    delete(findobj('Tag', 'SelectionValley'))
+    hold(ax,'on')
+    % Plot Upper Crux
+    % Plot vertical line of the cross
+    line(ax, [latency_pos, latency_pos], [peak_pos - crossLengthY, peak_pos + crossLengthY], ...
+        'Tag', 'SelectionPeak', 'Color', 'r', 'LineWidth', 1); % Vertical line
+    % Plot horizontal line of the cross
+    line(ax, [latency_pos - crossLengthX, latency_pos + crossLengthX], [peak_pos, peak_pos], ...
+        'Tag', 'SelectionPeak', 'Color', 'r', 'LineWidth', 1); % Horizontal line
+
+    % Plot Lower Crux
+    % Plot vertical line of the cross
+    line(ax, [latency_neg, latency_neg], [peak_neg - crossLengthY, peak_neg + crossLengthY], ...
+        'Tag', 'SelectionValley', 'Color', 'b', 'LineWidth', 1); % Vertical line
+    % Plot horizontal line of the cross
+    line(ax, [latency_neg - crossLengthX, latency_neg + crossLengthX], [peak_neg, peak_neg], ...
+        'Tag', 'SelectionValley', 'Color', 'b', 'LineWidth', 1); % Horizontal line
+    hold(ax,'off')
+
+    % Plot topoplot
+    updateTopoplot(mainFig, latency_pos,mainFig.UserData.axes4,mainFig.UserData.componentsTable.Data{row,1},'Peak')
+    updateTopoplot(mainFig, latency_neg,mainFig.UserData.axes5,mainFig.UserData.componentsTable.Data{row,1},'Valley')
 end
 
 function mouseMove(src, ~)
